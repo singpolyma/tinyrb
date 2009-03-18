@@ -27,6 +27,7 @@
 #define TR_CARRAY(X)         TR_CTYPE(X,Array)
 #define TR_CHASH(X)          TR_CTYPE(X,Hash)
 #define TR_CRANGE(X)         TR_CTYPE(X,Range)
+#define TR_CPROC(X)          TR_CTYPE(X,Proc)
 #define TR_CSTRING(X)        (tr_assert(TR_IS_A(X,String)||TR_IS_A(X,Symbol), "TypeError: expected String"),(TrString*)(X))
 #define TR_CMETHOD(X)        ((TrMethod*)X)
 #define TR_CBINDING(X)       TR_CTYPE(X,Binding)
@@ -126,7 +127,7 @@ KHASH_MAP_INIT_INT(OBJ, OBJ);
 
 typedef enum {
   /*  0 */ TR_T_Object, TR_T_Module, TR_T_Class, TR_T_Method, TR_T_Binding,
-  /*  5 */ TR_T_Symbol, TR_T_String, TR_T_Fixnum, TR_T_Range,
+  /*  5 */ TR_T_Symbol, TR_T_String, TR_T_Fixnum, TR_T_Range, TR_T_Proc,
   /*  9 */ TR_T_NilClass, TR_T_TrueClass, TR_T_FalseClass,
   /* 12 */ TR_T_Array, TR_T_Hash,
   /* 14 */ TR_T_Node,
@@ -175,6 +176,11 @@ typedef struct TrClosure {
   TrUpval *upvals;
   struct TrFrame *frame;
 } TrClosure;
+
+typedef struct TrProc {
+  TR_OBJECT_HEADER;
+  TrClosure *closure;
+} TrProc;
 
 typedef OBJ (TrFunc)(VM, OBJ receiver, ...);
 typedef struct {
@@ -301,6 +307,7 @@ void TrRange_init(VM);
 
 /* proc */
 TrClosure *TrClosure_new(VM, TrBlock *b);
+void TrProc_init(VM);
 
 /* object */
 OBJ TrObject_new(VM);

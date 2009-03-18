@@ -8,7 +8,7 @@
 [x] unary - and !
 [ ] default arg value
 [ ] namespace constants in Module (A::B)
-[ ] upval in block
+[x] upval in block
 [ ] Regexp
 [ ] Proc
 [ ] begin...rescue...ensure

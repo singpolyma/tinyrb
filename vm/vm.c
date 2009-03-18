@@ -5,7 +5,7 @@
 #include "opcode.h"
 #include "internal.h"
 
-OBJ TrVM_step(VM, TrFrame *f, TrBlock * b, int argc, OBJ argv[], TrClosure *closure);
+OBJ TrVM_step(VM, TrFrame *f, TrBlock * b, int argc, OBJ argv[]);
 
 static void TrFrame_push(VM, OBJ self, OBJ class, TrClosure *closure) {
   TrFrame *prevf = vm->cf < 0 ? 0 : FRAME;
@@ -131,7 +131,7 @@ static OBJ TrVM_defclass(VM, TrFrame *f, OBJ name, TrBlock *b, int module, OBJ s
     TrObject_const_set(vm, FRAME->class, name, mod);
   }
   TrFrame_push(vm, mod, mod, 0);
-  TrVM_step(vm, FRAME, b, 0, 0, 0);
+  TrVM_step(vm, FRAME, b, 0, 0);
   TrFrame_pop(vm);
   return mod;
 }
@@ -140,7 +140,7 @@ static OBJ TrVM_interpret_method(VM, OBJ self, int argc, OBJ argv[]) {
   assert(FRAME->method);
   register TrBlock *b = (TrBlock *)TR_CMETHOD(FRAME->method)->data;
   if (argc != b->argc) tr_raise("Expected %lu arguments, got %d.\n", b->argc, argc);
-  return TrVM_step(vm, FRAME, b, argc, argv, 0);
+  return TrVM_step(vm, FRAME, b, argc, argv);
 }
 
 static OBJ TrVM_interpret_method_with_splat(VM, OBJ self, int argc, OBJ argv[]) {
@@ -148,7 +148,7 @@ static OBJ TrVM_interpret_method_with_splat(VM, OBJ self, int argc, OBJ argv[]) 
   register TrBlock *b = (TrBlock *)TR_CMETHOD(FRAME->method)->data;
   if (argc < b->argc-1) tr_raise("Expected at least %lu arguments, got %d.\n", b->argc-1, argc);
   argv[b->argc-1] = TrArray_new3(vm, argc - b->argc + 1, &argv[b->argc-1]);
-  return TrVM_step(vm, FRAME, b, b->argc, argv, 0);
+  return TrVM_step(vm, FRAME, b, b->argc, argv);
 }
 
 static OBJ TrVM_defmethod(VM, TrFrame *f, OBJ name, TrBlock *b, int meta, OBJ receiver) {
@@ -166,7 +166,7 @@ static OBJ TrVM_defmethod(VM, TrFrame *f, OBJ name, TrBlock *b, int meta, OBJ re
 static inline OBJ TrVM_yield(VM, TrFrame *f, int argc, OBJ argv[]) {
   TrClosure *cl = f->closure;
   if (!cl) tr_raise("LocalJumpError: no block given");
-  return TrVM_step(vm, cl->frame, cl->block, argc, argv, cl);
+  return TrVM_step(vm, cl->frame, cl->block, argc, argv);
 }
 
 /* dispatch macros */
@@ -192,7 +192,7 @@ static inline OBJ TrVM_yield(VM, TrFrame *f, int argc, OBJ argv[]) {
 #define sBx  (short)(((B<<8)+C))
 #define SITE (b->sites.a)
 
-OBJ TrVM_step(VM, register TrFrame *f, TrBlock *b, int argc, OBJ argv[], TrClosure *closure) {
+OBJ TrVM_step(VM, register TrFrame *f, TrBlock *b, int argc, OBJ argv[]) {
   f->line = b->line;
   f->filename = b->filename;
   register TrInst *ip = b->code.a;
@@ -206,7 +206,7 @@ OBJ TrVM_step(VM, register TrFrame *f, TrBlock *b, int argc, OBJ argv[], TrClosu
   OBJ *locals = f->locals = TR_ALLOC_N(OBJ, kv_size(b->locals));
   TR_MEMCPY_N(locals, argv, OBJ, argc);
   TrUpval *upvals = 0;
-  if (closure) upvals = closure->upvals;
+  if (f->closure) upvals = f->closure->upvals;
   
 #ifdef TR_THREADED_DISPATCH
   static void *labels[] = { TR_OP_LABELS };
@@ -365,7 +365,7 @@ void TrVM_rescue(VM) {
 
 OBJ TrVM_run(VM, TrBlock *b, OBJ self, OBJ class, int argc, OBJ argv[]) {
   TrFrame_push(vm, self, class, 0);
-  OBJ ret = TrVM_step(vm, FRAME, b, argc, argv, 0);
+  OBJ ret = TrVM_step(vm, FRAME, b, argc, argv);
   TrFrame_pop(vm);
   return ret;
 }
@@ -416,6 +416,7 @@ TrVM *TrVM_new() {
   TrArray_init(vm);
   TrHash_init(vm);
   TrRange_init(vm);
+  TrProc_init(vm);
   
   vm->self = TrObject_new(vm);
   vm->cf = -1;
