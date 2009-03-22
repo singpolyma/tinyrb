@@ -4,10 +4,11 @@
 /*
 == TinyRb opcodes.
 Format of one instruction: OPCODE A B C
-Bx   -- unsigned value of BC
-sBx  -- signed value of BC
-R[A] -- Value of register which index is stored in A of the current instruction.
-K[A] -- Value which index is stored in A of the current instruction.
+Bx    -- unsigned value of BC
+sBx   -- signed value of BC
+R[A]  -- Value of register which index is stored in A of the current instruction.
+R[nA] -- Value of the register A in the next instruction (instruction will be ignored).
+K[A]  -- Value which index is stored in A of the current instruction.
 */
 enum TrInstCode {
   /* opname            operands description */
@@ -27,19 +28,17 @@ enum TrInstCode {
   TR_OP_JMPIF,      /* A sBx    jump sBx instructions if R[A] */
   TR_OP_JMPUNLESS,  /* A sBx    jump sBx instructions unless R[A] */
   TR_OP_RETURN,     /* A        return R[A] */
-  TR_OP_SETLOCAL,   /* A B      locals[B] = R[A] */
-  TR_OP_GETLOCAL,   /* A B      R[A] = locals[B] */
   TR_OP_SETUPVAL,   /* A B      upvals[B] = R[A] */
   TR_OP_GETUPVAL,   /* A B      R[A] = upvals[B] */
   TR_OP_FIXNUM_ADD,
   TR_OP_FIXNUM_SUB,
   TR_OP_FIXNUM_LT,
-  TR_OP_DEF,        /* A Bx     R[0] = define method k[Bx] on self w/ blocks[A] */
-  TR_OP_METADEF,    /* A Bx     R[0] = define method k[Bx] on R[0] w/ blocks[A] */
+  TR_OP_DEF,        /* A Bx     define method k[Bx] on self w/ blocks[A] */
+  TR_OP_METADEF,    /* A Bx     define method k[Bx] on R[nA] w/ blocks[A] */
   TR_OP_GETCONST,   /* A Bx     R[A] = Consts[k[Bx]] */
   TR_OP_SETCONST,   /* A Bx     Consts[k[Bx]] = R[A] */
-  TR_OP_CLASS,      /* A Bx     R[0] = define class k[Bx] on self w/ blocks[A] and superclass R[0] */
-  TR_OP_MODULE,     /* A Bx     R[0] = define module k[Bx] on self w/ blocks[A] */
+  TR_OP_CLASS,      /* A Bx     define class k[Bx] on self w/ blocks[A] and superclass R[nA] */
+  TR_OP_MODULE,     /* A Bx     define module k[Bx] on self w/ blocks[A] */
   TR_OP_NEWARRAY,   /* A B      R[A] = Array.new(R[A+1]..R[A+1+B]) */
   TR_OP_NEWHASH,    /* A B      R[A] = Hash.new(R[A+1] => R[A+2] .. R[A+1+B*2] => R[A+2+B*2]) */
   TR_OP_YIELD,      /* A B      R[A] = passed_block.call(R[A+1]..R[A+1+B]) */
@@ -68,8 +67,6 @@ enum TrInstCode {
   "jmpif", \
   "jmpunless", \
   "return", \
-  "setlocal", \
-  "getlocal", \
   "setupval", \
   "getupval", \
   "fixnum_add", \
@@ -110,8 +107,6 @@ enum TrInstCode {
   &&op_JMPIF, \
   &&op_JMPUNLESS, \
   &&op_RETURN, \
-  &&op_SETLOCAL, \
-  &&op_GETLOCAL, \
   &&op_SETUPVAL, \
   &&op_GETUPVAL, \
   &&op_FIXNUM_ADD, \
