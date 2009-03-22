@@ -1,6 +1,7 @@
-p = Proc.new do |x|
-  x
+y = 1
+add = Proc.new do |x|
+  x + y
 end
 
-puts p.call("proc it bro!")
-# => proc it bro!
+puts add.call(2)
+# => 3

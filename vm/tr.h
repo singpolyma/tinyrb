@@ -272,6 +272,7 @@ OBJ TrVM_load(VM, char *filename);
 void TrVM_raise(VM, OBJ exception);
 void TrVM_rescue(VM);
 OBJ TrVM_run(VM, TrBlock *b, OBJ self, OBJ class, int argc, OBJ argv[]);
+OBJ TrVM_run2(VM, TrBlock *b, OBJ self, OBJ class, int argc, OBJ argv[], TrClosure *cl);
 void TrVM_destroy(TrVM *vm);
 
 /* string */

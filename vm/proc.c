@@ -16,8 +16,7 @@ OBJ TrProc_new(VM) {
 
 static OBJ TrProc_call(VM, OBJ self, int argc, OBJ argv[]) {
   TrClosure *cl = TR_CPROC(self)->closure;
-  cl->frame->closure = cl;
-  return TrVM_run(vm, cl->block, cl->frame->self, cl->frame->class, argc, argv);
+  return TrVM_run2(vm, cl->block, cl->frame->self, cl->frame->class, argc, argv, cl);
 }
 
 void TrProc_init(VM) {
