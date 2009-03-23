@@ -174,7 +174,9 @@ typedef struct TrUpval {
 typedef struct TrClosure {
   TrBlock *block;
   TrUpval *upvals;
-  struct TrFrame *frame;
+  OBJ self;
+  OBJ class;
+  struct TrClosure *parent;
 } TrClosure;
 
 typedef struct TrProc {
@@ -307,7 +309,7 @@ OBJ TrRange_new(VM, OBJ start, OBJ end, int exclusive);
 void TrRange_init(VM);
 
 /* proc */
-TrClosure *TrClosure_new(VM, TrBlock *b);
+TrClosure *TrClosure_new(VM, TrBlock *b, OBJ self, OBJ class, TrClosure *parent);
 void TrProc_init(VM);
 
 /* object */

@@ -5,20 +5,21 @@
 #include "opcode.h"
 #include "internal.h"
 
-OBJ TrVM_step(VM, TrFrame *f, TrBlock * b, int argc, OBJ argv[], TrClosure *cl);
+OBJ TrVM_step(VM, TrFrame *f, TrBlock * b, int localc, OBJ locals[]);
 
-static void TrFrame_push(VM, OBJ self, OBJ class, TrClosure *closure) {
+static void TrFrame_push(VM) {
   TrFrame *prevf = vm->cf < 0 ? 0 : FRAME;
   vm->cf++;
   if (vm->cf >= TR_MAX_FRAMES) tr_raise("Stack overflow");
   TrFrame *f = FRAME;
-  f->method = TR_NIL;
-  f->filename = TR_NIL;
-  f->self = self;
-  f->class = class;
+  f->method = 0;
+  f->filename = 0;
+  f->closure = 0;
+  f->self = f->class = 0;
   f->line = 1;
-  if (prevf) TR_MEMCPY(&f->rescue_jmp, &prevf->rescue_jmp, jmp_buf);
-  if (closure) f->closure = closure;
+  if (prevf) {
+    TR_MEMCPY(&f->rescue_jmp, &prevf->rescue_jmp, jmp_buf);
+  }
   
   /* init first frame */
   if (vm->cf == 0) {
@@ -26,6 +27,12 @@ static void TrFrame_push(VM, OBJ self, OBJ class, TrClosure *closure) {
       exit(1);
     })
   }
+}
+
+static void TrFrame_setup(VM, TrFrame *f, OBJ self, OBJ class, TrClosure *closure) {
+  f->self = self;
+  f->class = class;
+  f->closure = closure;
 }
 
 static void TrFrame_pop(VM) {
@@ -76,11 +83,12 @@ static OBJ TrVM_lookup(VM, TrBlock *b, OBJ receiver, OBJ msg, TrInst *ip) {
 static inline OBJ TrVM_call(VM, TrFrame *callingf, OBJ receiver, OBJ method, int argc, OBJ *args, int splat, TrClosure *cl) {
   /* prepare call frame */
   /* TODO do not create a call frame if calling a pure C function */
-  TrFrame_push(vm, receiver, TR_COBJECT(receiver)->class, cl);
+  TrFrame_push(vm);
   register TrFrame *f = FRAME;
+  TrFrame_setup(vm, f, receiver, TR_COBJECT(receiver)->class, cl);
   f->method = TR_CMETHOD(method);
   register TrFunc *func = f->method->func;
-  if (cl) cl->frame = callingf;
+  /* if (cl) cl->frame = callingf; */
   OBJ ret = TR_NIL;
   
   /* splat last arg is needed */
@@ -127,8 +135,9 @@ static OBJ TrVM_defclass(VM, TrFrame *f, OBJ name, TrBlock *b, int module, OBJ s
       mod = TrClass_new(vm, name, super ? super : TR_CLASS(Object));
     TrObject_const_set(vm, FRAME->class, name, mod);
   }
-  TrFrame_push(vm, mod, mod, 0);
-  TrVM_step(vm, FRAME, b, 0, 0, 0);
+  TrFrame_push(vm);
+  TrFrame_setup(vm, FRAME, mod, mod, 0);
+  TrVM_step(vm, FRAME, b, 0, 0);
   TrFrame_pop(vm);
   return mod;
 }
@@ -137,7 +146,7 @@ static OBJ TrVM_interpret_method(VM, OBJ self, int argc, OBJ argv[]) {
   assert(FRAME->method);
   register TrBlock *b = (TrBlock *)TR_CMETHOD(FRAME->method)->data;
   if (argc != b->argc) tr_raise("Expected %lu arguments, got %d.\n", b->argc, argc);
-  return TrVM_step(vm, FRAME, b, argc, argv, 0);
+  return TrVM_step(vm, FRAME, b, argc, argv);
 }
 
 static OBJ TrVM_interpret_method_with_splat(VM, OBJ self, int argc, OBJ argv[]) {
@@ -145,7 +154,7 @@ static OBJ TrVM_interpret_method_with_splat(VM, OBJ self, int argc, OBJ argv[]) 
   register TrBlock *b = (TrBlock *)TR_CMETHOD(FRAME->method)->data;
   if (argc < b->argc-1) tr_raise("Expected at least %lu arguments, got %d.\n", b->argc-1, argc);
   argv[b->argc-1] = TrArray_new3(vm, argc - b->argc + 1, &argv[b->argc-1]);
-  return TrVM_step(vm, FRAME, b, b->argc, argv, 0);
+  return TrVM_step(vm, FRAME, b, b->argc, argv);
 }
 
 static OBJ TrVM_defmethod(VM, TrFrame *f, OBJ name, TrBlock *b, int meta, OBJ receiver) {
@@ -163,8 +172,14 @@ static OBJ TrVM_defmethod(VM, TrFrame *f, OBJ name, TrBlock *b, int meta, OBJ re
 static inline OBJ TrVM_yield(VM, TrFrame *f, int argc, OBJ argv[]) {
   TrClosure *cl = f->closure;
   if (!cl) tr_raise("LocalJumpError: no block given");
-  /* cl->frame->closure = cl; */
-  return TrVM_step(vm, cl->frame, cl->block, argc, argv, cl);
+  /* TODO one way breaks nested yields the other breaks upval,
+     need to rethink all this... */
+  /* while (cl->parent) cl = cl->parent; */
+  TrFrame_push(vm);
+  TrFrame_setup(vm, FRAME, cl->self, cl->class, cl);
+  OBJ ret = TrVM_step(vm, FRAME, cl->block, argc, argv);
+  TrFrame_pop(vm);
+  return ret;
 }
 
 /* dispatch macros */
@@ -192,7 +207,7 @@ static inline OBJ TrVM_yield(VM, TrFrame *f, int argc, OBJ argv[]) {
 #define sBx  (short)(((B<<8)+C))
 #define SITE (b->sites.a)
 
-OBJ TrVM_step(VM, register TrFrame *f, TrBlock *b, int argc, OBJ argv[], TrClosure *cl) {
+OBJ TrVM_step(VM, TrFrame *f, TrBlock * b, int localc, OBJ locals[]) {
   f->line = b->line;
   f->filename = b->filename;
   register TrInst *ip = b->code.a;
@@ -203,10 +218,10 @@ OBJ TrVM_step(VM, register TrFrame *f, TrBlock *b, int argc, OBJ argv[], TrClosu
   size_t nlocals = kv_size(b->locals);
   register OBJ *stack = f->stack = TR_ALLOC_N(OBJ, b->regc + nlocals);
   /* transfer locals */
-  assert(argc <= nlocals && "can't fit args in locals");
-  TR_MEMCPY_N(stack, argv, OBJ, argc);
+  /* assert(localc <= nlocals && "can't fit args in locals"); */
+  TR_MEMCPY_N(stack, locals, OBJ, localc);
   TrUpval *upvals = 0;
-  if (cl) upvals = cl->upvals;
+  if (f->closure) upvals = f->closure->upvals;
   
 #ifdef TR_THREADED_DISPATCH
   static void *labels[] = { TR_OP_LABELS };
@@ -265,7 +280,7 @@ OBJ TrVM_step(VM, register TrFrame *f, TrBlock *b, int argc, OBJ argv[], TrClosu
              move    0  0  0 ; this is not executed
              return  0
          */
-        cl = TrClosure_new(vm, blocks[C-1]);
+        cl = TrClosure_new(vm, blocks[C-1], f->self, f->class, f->closure);
         size_t i, nupval = kv_size(cl->block->upvals);
         for (i = 0; i < nupval; ++i) {
           ++ip;
@@ -362,15 +377,13 @@ void TrVM_rescue(VM) {
 }
 
 OBJ TrVM_run(VM, TrBlock *b, OBJ self, OBJ class, int argc, OBJ argv[]) {
-  TrFrame_push(vm, self, class, 0);
-  OBJ ret = TrVM_step(vm, FRAME, b, argc, argv, 0);
-  TrFrame_pop(vm);
-  return ret;
+  return TrVM_run2(vm, b, self, class, argc, argv, 0);
 }
 
 OBJ TrVM_run2(VM, TrBlock *b, OBJ self, OBJ class, int argc, OBJ argv[], TrClosure *cl) {
-  TrFrame_push(vm, self, class, 0);
-  OBJ ret = TrVM_step(vm, FRAME, b, argc, argv, cl);
+  TrFrame_push(vm);
+  TrFrame_setup(vm, FRAME, self, class, cl);
+  OBJ ret = TrVM_step(vm, FRAME, b, argc, argv);
   TrFrame_pop(vm);
   return ret;
 }

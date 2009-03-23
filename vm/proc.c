@@ -1,10 +1,13 @@
 #include "tr.h"
 #include "internal.h"
 
-TrClosure *TrClosure_new(VM, TrBlock *b) {
+TrClosure *TrClosure_new(VM, TrBlock *b, OBJ self, OBJ class, TrClosure *parent) {
   TrClosure *cl = TR_ALLOC(TrClosure);
   cl->block = b;
   cl->upvals = TR_ALLOC_N(TrUpval, kv_size(b->upvals));
+  cl->self = self;
+  cl->class = class;
+  cl->parent = parent;
   return cl;
 }
 
@@ -16,7 +19,7 @@ OBJ TrProc_new(VM) {
 
 static OBJ TrProc_call(VM, OBJ self, int argc, OBJ argv[]) {
   TrClosure *cl = TR_CPROC(self)->closure;
-  return TrVM_run2(vm, cl->block, cl->frame->self, cl->frame->class, argc, argv, cl);
+  return TrVM_run2(vm, cl->block, cl->self, cl->class, argc, argv, cl);
 }
 
 void TrProc_init(VM) {
